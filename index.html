@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Snowboard Rush</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%);
+            overflow: hidden;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 30%, #FFFFFF 100%);
+        }
+
+        .scrolling-bg {
+            position: absolute;
+            width: 100%;
+            height: 200%;
+            background-image: url('assets/Snow_Tile.png');
+            background-size: 256px 256px;
+            background-repeat: repeat;
+            animation: scrollDown 10s linear infinite;
+            z-index: 1;
+            opacity: 0.8;
+        }
+
+        .scrolling-bg-layer2 {
+            position: absolute;
+            width: 100%;
+            height: 200%;
+            background-image: url('assets/Snow_Tile.png');
+            background-size: 128px 128px;
+            background-repeat: repeat;
+            animation: scrollDown 6s linear infinite;
+            z-index: 2;
+            opacity: 0.4;
+        }
+
+        @keyframes scrollDown {
+            0% { transform: translateY(-50%); }
+            100% { transform: translateY(0%); }
+        }
+
+        canvas {
+            position: absolute;
+            background: transparent;
+            z-index: 10;
+            touch-action: none;
+        }
+
+        .ui {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+            z-index: 20;
+        }
+
+        .game-over, .start-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            background: rgba(0,0,0,0.9);
+            padding: 30px;
+            border-radius: 15px;
+            z-index: 30;
+            width: 85%;
+            max-width: 400px;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            touch-action: manipulation;
+        }
+
+        button:active {
+            background: #45a049;
+        }
+
+        .controls-info {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            text-align: center;
+            font-size: 16px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            z-index: 20;
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="scrolling-bg"></div>
+        <div class="scrolling-bg-layer2"></div>
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="ui">
+            <div>WYNIK: <span id="score">0</span></div>
+        </div>
+        
+        <div class="start-screen" id="startScreen">
+            <h1>🏂 Snowboard Rush</h1>
+            <p><strong>STEROWANIE:</strong></p>
+            <p>📱 <strong>Przeciągnij palcem</strong> w lewo i prawo</p>
+            <p>📱 <strong>Dotknij ekranu</strong> aby skoczyć</p>
+            <p>🎯 Poruszaj się swobodnie po całej szerokości!</p>
+            <p>🚫 Unikaj przeszkód!</p>
+            <button onclick="startGame()">Zaczynajmy!</button>
+        </div>
+        
+        <div class="game-over" id="gameOver">
+            <h2>💥 Koniec Gry!</h2>
+            <p>Twój wynik: <span id="finalScore">0</span></p>
+            <p>Najlepszy wynik: <span id="bestScore">0</span></p>
+            <button onclick="restartGame()">Zagraj Ponownie</button>
+        </div>
+        
+        <div class="controls-info">
+            Przeciągnij palcem w lewo/prawo | Dotknij aby skoczyć
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        let gameState = 'start';
+        let score = 0;
+        let bestScore = localStorage.getItem('snowboard-best') || 0;
+        let gameSpeed = 3;
+        let snowflakes = [];
+        let obstacles = [];
+        let particles = [];
+        
+        // Gracz ze swobodnym ruchem
+        const player = {
+            x: canvas.width / 2 - 15,
+            y: canvas.height - 150,
+            width: 30,
+            height: 40,
+            velY: 0,
+            jumping: false,
+            angle: 0
+        };
+        
+        // Sterowanie dotykowe
+        let touch = {
+            active: false,
+            startX: 0,
+            startY: 0,
+            currentX: 0,
+            currentY: 0,
+            playerStartX: 0
+        };
+        
+        // Klasy obiektów
+        class Snowflake {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 3 + 1;
+                this.speed = Math.random() * 2 + 1;
+                this.opacity = Math.random() * 0.8 + 0.2;
+            }
+            
+            update() {
+                this.y += this.speed + gameSpeed;
+                this.x += Math.sin(this.y * 0.01) * 0.5;
+                
+                if (this.y > canvas.height) {
+                    this.y = -10;
+                    this.x = Math.random() * canvas.width;
+                }
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+        
+        class Obstacle {
+            constructor() {
+                this.x = Math.random() * (canvas.width - 60) + 30;
+                this.y = -50;
+                this.width = 40;
+                this.height = 40;
+                this.type = Math.random() > 0.5 ? 'tree' : 'rock';
+            }
+            
+            update() {
+                this.y += gameSpeed + 1;
+            }
+            
+            draw() {
+                if (this.type === 'tree') {
+                    // Pień
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(this.x + 15, this.y + 25, 10, 15);
+                    
+                    // Korona
+                    ctx.fillStyle = '#228B22';
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + 20, this.y);
+                    ctx.lineTo(this.x + 5, this.y + 25);
+                    ctx.lineTo(this.x + 35, this.y + 25);
+                    ctx.closePath();
+                    ctx.fill();
+                } else {
+                    // Kamień
+                    ctx.fillStyle = '#696969';
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + 20, this.y + 20, 20, 15, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#808080';
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + 15, this.y + 15, 8, 6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+        
+        // Obsługa dotykowego sterowania
+        function setupFreeMovementControls() {
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touchObj = e.touches[0];
+                touch.active = true;
+                touch.startX = touchObj.clientX;
+                touch.startY = touchObj.clientY;
+                touch.currentX = touchObj.clientX;
+                touch.currentY = touchObj.clientY;
+                touch.playerStartX = player.x;
+            });
+            
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (!touch.active || gameState !== 'playing') return;
+                
+                const touchObj = e.touches[0];
+                touch.currentX = touchObj.clientX;
+                touch.currentY = touchObj.clientY;
+                
+                // Oblicz przesunięcie od początku dotyku
+                const deltaX = touch.currentX - touch.startX;
+                
+                // Nowa pozycja gracza
+                let newX = touch.playerStartX + deltaX;
+                
+                // Ogranicz do granic ekranu
+                newX = Math.max(0, Math.min(canvas.width - player.width, newX));
+                
+                player.x = newX;
+            });
+            
+            canvas.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                
+                if (gameState === 'playing' && touch.active) {
+                    // Sprawdź czy to był krótki dotyk (skok)
+                    const deltaX = Math.abs(touch.currentX - touch.startX);
+                    const deltaY = Math.abs(touch.currentY - touch.startY);
+                    
+                    if (deltaX < 20 && deltaY < 20 && !player.jumping) {
+                        // Krótki dotyk - skok
+                        player.jumping = true;
+                        player.velY = -15;
+                        addParticles(player.x + 15, player.y + 40, 'white');
+                    }
+                }
+                
+                touch.active = false;
+            });
+        }
+        
+        // Inicjalizacja śnieżynek
+        function initSnowflakes() {
+            snowflakes = [];
+            for (let i = 0; i < 60; i++) {
+                snowflakes.push(new Snowflake());
+            }
+        }
+        
+        // Rysowanie gracza
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x + player.width/2, player.y + player.height/2);
+            ctx.rotate(player.angle);
+            
+            // Snowboard
+            ctx.fillStyle = '#FF6B35';
+            ctx.shadowColor = '#FF4500';
+            ctx.shadowBlur = 5;
+            ctx.fillRect(-18, 15, 36, 8);
+            
+            // Gracz
+            ctx.fillStyle = '#4A90E2';
+            ctx.shadowBlur = 0;
+            ctx.fillRect(-8, -15, 16, 20);
+            
+            // Głowa
+            ctx.fillStyle = '#FFDBAC';
+            ctx.beginPath();
+            ctx.arc(0, -20, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Czapka
+            ctx.fillStyle = '#FF0000';
+            ctx.beginPath();
+            ctx.arc(0, -25, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        
+        // Sprawdzanie kolizji
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+        
+        // Dodawanie cząsteczek
+        function addParticles(x, y, color) {
+            for (let i = 0; i < 8; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    velX: (Math.random() - 0.5) * 6,
+                    velY: Math.random() * -4 - 1,
+                    life: 25,
+                    color: color
+                });
+            }
+        }
+        
+        // Główna pętla gry
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (gameState === 'playing') {
+                gameSpeed = Math.min(3 + score * 0.01, 10);
+                
+                // Śnieżynki
+                snowflakes.forEach(flake => {
+                    flake.update();
+                    flake.draw();
+                });
+                
+                // Skok
+                if (player.jumping) {
+                    player.y += player.velY;
+                    player.velY += 0.6;
+                    player.angle = player.velY * 0.015;
+                    
+                    if (player.y >= canvas.height - 150) {
+                        player.y = canvas.height - 150;
+                        player.jumping = false;
+                        player.velY = 0;
+                        player.angle = 0;
+                        addParticles(player.x + 15, player.y + 40, 'white');
+                    }
+                }
+                
+                // Generowanie przeszkód
+                if (Math.random() < 0.02) {
+                    obstacles.push(new Obstacle());
+                }
+                
+                // Przeszkody
+                obstacles = obstacles.filter(obstacle => {
+                    obstacle.update();
+                    obstacle.draw();
+                    
+                    if (checkCollision(player, obstacle) && !player.jumping) {
+                        gameState = 'gameOver';
+                        addParticles(player.x + 15, player.y + 20, 'red');
+                        return false;
+                    }
+                    
+                    return obstacle.y < canvas.height + 50;
+                });
+                
+                // Cząsteczki
+                particles = particles.filter(particle => {
+                    particle.x += particle.velX;
+                    particle.y += particle.velY;
+                    particle.velY += 0.2;
+                    particle.life--;
+                    
+                    ctx.save();
+                    ctx.globalAlpha = particle.life / 25;
+                    ctx.fillStyle = particle.color;
+                    ctx.fillRect(particle.x, particle.y, 3, 3);
+                    ctx.restore();
+                    
+                    return particle.life > 0;
+                });
+                
+                drawPlayer();
+                score += 0.1;
+                
+                // UI
+                document.getElementById('score').textContent = Math.floor(score);
+            }
+            
+            if (gameState === 'gameOver') {
+                showGameOver();
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Funkcje gry
+        function startGame() {
+            gameState = 'playing';
+            score = 0;
+            gameSpeed = 3;
+            obstacles = [];
+            particles = [];
+            
+            player.x = canvas.width / 2 - 15;
+            player.y = canvas.height - 150;
+            player.velY = 0;
+            player.jumping = false;
+            player.angle = 0;
+            
+            touch.active = false;
+            
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOver').style.display = 'none';
+        }
+        
+        function showGameOver() {
+            if (score > bestScore) {
+                bestScore = Math.floor(score);
+                localStorage.setItem('snowboard-best', bestScore);
+            }
+            
+            document.getElementById('finalScore').textContent = Math.floor(score);
+            document.getElementById('bestScore').textContent = bestScore;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+        
+        function restartGame() {
+            startGame();
+        }
+        
+        // Obsługa zmiany rozmiaru
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        // Zapobieganie przewijaniu
+        document.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+        
+        // Inicjalizacja
+        setupFreeMovementControls();
+        initSnowflakes();
+        gameLoop();
+        
+        document.getElementById('bestScore').textContent = bestScore;
+        
+        console.log('Gra snowboardowa gotowa! 🏂');
+    </script>
+</body>
+</html>
