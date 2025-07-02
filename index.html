@@ -34,6 +34,8 @@
             animation: scrollDown 10s linear infinite;
             z-index: 1;
             opacity: 0.8;
+            will-change: transform;
+            transform: translateZ(0);
         }
 
         .scrolling-bg-layer2 {
@@ -46,6 +48,8 @@
             animation: scrollDown 6s linear infinite;
             z-index: 2;
             opacity: 0.4;
+            will-change: transform;
+            transform: translateZ(0);
         }
 
         @keyframes scrollDown {
@@ -103,21 +107,6 @@
         button:active {
             background: #45a049;
         }
-
-        .controls-info {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: white;
-            text-align: center;
-            font-size: 16px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-            z-index: 20;
-            background: rgba(0,0,0,0.5);
-            padding: 10px 20px;
-            border-radius: 20px;
-        }
     </style>
 </head>
 <body>
@@ -132,23 +121,16 @@
         
         <div class="start-screen" id="startScreen">
             <h1>🏂 Snowboard Rush</h1>
-            <p><strong>STEROWANIE:</strong></p>
-            <p>📱 <strong>Przeciągnij palcem</strong> w lewo i prawo</p>
-            <p>📱 <strong>Dotknij ekranu</strong> aby skoczyć</p>
             <p>🎯 Poruszaj się swobodnie po całej szerokości!</p>
             <p>🚫 Unikaj przeszkód!</p>
-            <button onclick="startGame()">Zaczynajmy!</button>
+            <button onclick="startGame()">Rozpocznij Grę</button>
         </div>
         
-        <div class="game-over" id="gameOver">
+        <div class="game-over" id="gameOver" style="display: none;">
             <h2>💥 Koniec Gry!</h2>
             <p>Twój wynik: <span id="finalScore">0</span></p>
             <p>Najlepszy wynik: <span id="bestScore">0</span></p>
             <button onclick="restartGame()">Zagraj Ponownie</button>
-        </div>
-        
-        <div class="controls-info">
-            Przeciągnij palcem w lewo/prawo | Dotknij aby skoczyć
         </div>
     </div>
 
@@ -166,6 +148,11 @@
         let snowflakes = [];
         let obstacles = [];
         let particles = [];
+        let gameOverShown = false;
+        
+        // Załaduj obrazek skatera
+        const skaterImage = new Image();
+        skaterImage.src = 'assets/skater.png';
         
         // Gracz ze swobodnym ruchem
         const player = {
@@ -322,34 +309,20 @@
             }
         }
         
-        // Rysowanie gracza
+        // Rysowanie gracza z obrazkiem
         function drawPlayer() {
             ctx.save();
             ctx.translate(player.x + player.width/2, player.y + player.height/2);
             ctx.rotate(player.angle);
             
-            // Snowboard
-            ctx.fillStyle = '#FF6B35';
-            ctx.shadowColor = '#FF4500';
-            ctx.shadowBlur = 5;
-            ctx.fillRect(-18, 15, 36, 8);
-            
-            // Gracz
-            ctx.fillStyle = '#4A90E2';
-            ctx.shadowBlur = 0;
-            ctx.fillRect(-8, -15, 16, 20);
-            
-            // Głowa
-            ctx.fillStyle = '#FFDBAC';
-            ctx.beginPath();
-            ctx.arc(0, -20, 6, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Czapka
-            ctx.fillStyle = '#FF0000';
-            ctx.beginPath();
-            ctx.arc(0, -25, 8, 0, Math.PI * 2);
-            ctx.fill();
+            // Użyj obrazka skatera
+            if (skaterImage.complete) {
+                ctx.drawImage(skaterImage, -player.width/2, -player.height/2, player.width, player.height);
+            } else {
+                // Fallback - narysuj prostokąt jeśli obrazek się nie załadował
+                ctx.fillStyle = '#4A90E2';
+                ctx.fillRect(-player.width/2, -player.height/2, player.width, player.height);
+            }
             
             ctx.restore();
         }
@@ -416,6 +389,7 @@
                     
                     if (checkCollision(player, obstacle) && !player.jumping) {
                         gameState = 'gameOver';
+                        gameOverShown = false;
                         addParticles(player.x + 15, player.y + 20, 'red');
                         return false;
                     }
@@ -446,8 +420,9 @@
                 document.getElementById('score').textContent = Math.floor(score);
             }
             
-            if (gameState === 'gameOver') {
+            if (gameState === 'gameOver' && !gameOverShown) {
                 showGameOver();
+                gameOverShown = true;
             }
             
             requestAnimationFrame(gameLoop);
@@ -460,6 +435,7 @@
             gameSpeed = 3;
             obstacles = [];
             particles = [];
+            gameOverShown = false;
             
             player.x = canvas.width / 2 - 15;
             player.y = canvas.height - 150;
@@ -509,4 +485,4 @@
         console.log('Gra snowboardowa gotowa! 🏂');
     </script>
 </body>
-</html>
+    </html>
