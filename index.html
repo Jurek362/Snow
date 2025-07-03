@@ -24,39 +24,6 @@
             background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 30%, #FFFFFF 100%);
         }
 
-        .scrolling-bg {
-            position: absolute;
-            width: 100%;
-            height: 200%;
-            background-image: url('assets/Snow_Tile.png');
-            background-size: 256px 256px;
-            background-repeat: repeat;
-            animation: scrollDown 10s linear infinite;
-            z-index: 1;
-            opacity: 0.8;
-            will-change: transform;
-            transform: translateZ(0);
-        }
-
-        .scrolling-bg-layer2 {
-            position: absolute;
-            width: 100%;
-            height: 200%;
-            background-image: url('assets/Snow_Tile.png');
-            background-size: 128px 128px;
-            background-repeat: repeat;
-            animation: scrollDown 6s linear infinite;
-            z-index: 2;
-            opacity: 0.4;
-            will-change: transform;
-            transform: translateZ(0);
-        }
-
-        @keyframes scrollDown {
-            0% { transform: translateY(-50%); }
-            100% { transform: translateY(0%); }
-        }
-
         canvas {
             position: absolute;
             background: transparent;
@@ -111,8 +78,6 @@
 </head>
 <body>
     <div class="game-container">
-        <div class="scrolling-bg"></div>
-        <div class="scrolling-bg-layer2"></div>
         <canvas id="gameCanvas"></canvas>
         
         <div class="ui">
@@ -121,16 +86,16 @@
         
         <div class="start-screen" id="startScreen">
             <h1>🏂 Snowboard Rush</h1>
-            <p>🎯 Poruszaj się swobodnie po całej szerokości!</p>
-            <p>🚫 Unikaj przeszkód!</p>
+            <p>Cześć Jurku!</p>
+            <p>🎯 Zjeżdżaj ze stoku i unikaj przeszkód!</p>
             <button onclick="startGame()">Rozpocznij Grę</button>
         </div>
         
-        <div class="game-over" id="gameOver" style="display: none;">
+        <div class="game-over" id="gameOver">
             <h2>💥 Koniec Gry!</h2>
             <p>Twój wynik: <span id="finalScore">0</span></p>
             <p>Najlepszy wynik: <span id="bestScore">0</span></p>
-            <button onclick="restartGame()">Zagraj Ponownie</button>
+            <button onclick="startGame()">Rozpocznij Grę</button>
         </div>
     </div>
 
@@ -148,30 +113,43 @@
         let snowflakes = [];
         let obstacles = [];
         let particles = [];
-        let gameOverShown = false;
         
-        // Załaduj obrazek skatera
-        const skaterImage = new Image();
-        skaterImage.src = 'assets/skater.png';
+        // Przewijające się tło (w górę - tworzy efekt jazdy w dół)
+        let bgOffset1 = 0;
+        let bgOffset2 = 0;
         
-        // Gracz ze swobodnym ruchem
+        // Obrazki
+        const snowTileImg = new Image();
+        const skaterImg = new Image();
+        let imagesLoaded = 0;
+        const totalImages = 2;
+        
+        snowTileImg.src = 'assets/Snow_Tile.png';
+        skaterImg.src = 'assets/Skater.png';
+        
+        snowTileImg.onload = () => {
+            imagesLoaded++;
+            console.log('Snow_Tile.png załadowany');
+        };
+        
+        skaterImg.onload = () => {
+            imagesLoaded++;
+            console.log('Skater.png załadowany');
+        };
+        
+        // Gracz na górze ekranu (teraz jedziemy w dół)
         const player = {
-            x: canvas.width / 2 - 15,
-            y: canvas.height - 150,
-            width: 30,
-            height: 40,
-            velY: 0,
-            jumping: false,
-            angle: 0
+            x: canvas.width / 2 - 20,
+            y: 80, // Pozycja na górze ekranu
+            width: 40,
+            height: 50
         };
         
         // Sterowanie dotykowe
         let touch = {
             active: false,
             startX: 0,
-            startY: 0,
             currentX: 0,
-            currentY: 0,
             playerStartX: 0
         };
         
@@ -186,7 +164,8 @@
             }
             
             update() {
-                this.y += this.speed + gameSpeed;
+                // Śnieżynki spadają w dół (normalnie)
+                this.y += this.speed;
                 this.x += Math.sin(this.y * 0.01) * 0.5;
                 
                 if (this.y > canvas.height) {
@@ -209,14 +188,15 @@
         class Obstacle {
             constructor() {
                 this.x = Math.random() * (canvas.width - 60) + 30;
-                this.y = -50;
+                this.y = canvas.height + 50; // Zaczynają na dole ekranu
                 this.width = 40;
                 this.height = 40;
                 this.type = Math.random() > 0.5 ? 'tree' : 'rock';
             }
             
             update() {
-                this.y += gameSpeed + 1;
+                // Przeszkody poruszają się w górę (tworzy efekt jazdy w dół)
+                this.y -= gameSpeed + 1;
             }
             
             draw() {
@@ -248,16 +228,70 @@
             }
         }
         
+        // Rysowanie płynnego przewijającego się tła (w górę)
+        function drawScrollingBackground() {
+            if (imagesLoaded >= 1) {
+                const tileSize = 200;
+                
+                // Aktualizuj pozycje tła (w górę - tworzy efekt jazdy w dół)
+                bgOffset1 -= gameSpeed * 0.5;
+                bgOffset2 -= gameSpeed * 0.8;
+                
+                // Resetuj pozycje gdy wyjdą poza ekran
+                if (bgOffset1 <= -tileSize) bgOffset1 = 0;
+                if (bgOffset2 <= -tileSize) bgOffset2 = 0;
+                
+                // Warstwa 1 - główne tło
+                ctx.save();
+                ctx.globalAlpha = 0.8;
+                const tilesX = Math.ceil(canvas.width / tileSize) + 1;
+                const tilesY = Math.ceil(canvas.height / tileSize) + 2;
+                
+                for (let x = 0; x < tilesX; x++) {
+                    for (let y = 0; y < tilesY; y++) {
+                        ctx.drawImage(
+                            snowTileImg,
+                            x * tileSize,
+                            y * tileSize + bgOffset1,
+                            tileSize,
+                            tileSize
+                        );
+                    }
+                }
+                ctx.restore();
+                
+                // Warstwa 2 - dodatkowa głębia
+                ctx.save();
+                ctx.globalAlpha = 0.4;
+                const smallTileSize = tileSize * 0.6;
+                const smallTilesX = Math.ceil(canvas.width / smallTileSize) + 1;
+                const smallTilesY = Math.ceil(canvas.height / smallTileSize) + 2;
+                
+                for (let x = 0; x < smallTilesX; x++) {
+                    for (let y = 0; y < smallTilesY; y++) {
+                        ctx.drawImage(
+                            snowTileImg,
+                            x * smallTileSize + smallTileSize * 0.5,
+                            y * smallTileSize + bgOffset2,
+                            smallTileSize,
+                            smallTileSize
+                        );
+                    }
+                }
+                ctx.restore();
+            }
+        }
+        
         // Obsługa dotykowego sterowania
-        function setupFreeMovementControls() {
+        function setupMovementControls() {
             canvas.addEventListener('touchstart', (e) => {
                 e.preventDefault();
+                if (gameState !== 'playing') return;
+                
                 const touchObj = e.touches[0];
                 touch.active = true;
                 touch.startX = touchObj.clientX;
-                touch.startY = touchObj.clientY;
                 touch.currentX = touchObj.clientX;
-                touch.currentY = touchObj.clientY;
                 touch.playerStartX = player.x;
             });
             
@@ -267,7 +301,6 @@
                 
                 const touchObj = e.touches[0];
                 touch.currentX = touchObj.clientX;
-                touch.currentY = touchObj.clientY;
                 
                 // Oblicz przesunięcie od początku dotyku
                 const deltaX = touch.currentX - touch.startX;
@@ -283,20 +316,6 @@
             
             canvas.addEventListener('touchend', (e) => {
                 e.preventDefault();
-                
-                if (gameState === 'playing' && touch.active) {
-                    // Sprawdź czy to był krótki dotyk (skok)
-                    const deltaX = Math.abs(touch.currentX - touch.startX);
-                    const deltaY = Math.abs(touch.currentY - touch.startY);
-                    
-                    if (deltaX < 20 && deltaY < 20 && !player.jumping) {
-                        // Krótki dotyk - skok
-                        player.jumping = true;
-                        player.velY = -15;
-                        addParticles(player.x + 15, player.y + 40, 'white');
-                    }
-                }
-                
                 touch.active = false;
             });
         }
@@ -309,22 +328,21 @@
             }
         }
         
-        // Rysowanie gracza z obrazkiem
+        // Rysowanie gracza z teksturą
         function drawPlayer() {
-            ctx.save();
-            ctx.translate(player.x + player.width/2, player.y + player.height/2);
-            ctx.rotate(player.angle);
-            
-            // Użyj obrazka skatera
-            if (skaterImage.complete) {
-                ctx.drawImage(skaterImage, -player.width/2, -player.height/2, player.width, player.height);
+            if (imagesLoaded >= 2) {
+                ctx.drawImage(
+                    skaterImg,
+                    player.x,
+                    player.y,
+                    player.width,
+                    player.height
+                );
             } else {
-                // Fallback - narysuj prostokąt jeśli obrazek się nie załadował
+                // Fallback - zwykły prostokąt
                 ctx.fillStyle = '#4A90E2';
-                ctx.fillRect(-player.width/2, -player.height/2, player.width, player.height);
+                ctx.fillRect(player.x, player.y, player.width, player.height);
             }
-            
-            ctx.restore();
         }
         
         // Sprawdzanie kolizji
@@ -353,6 +371,9 @@
         function gameLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
+            // Rysuj przewijające się tło
+            drawScrollingBackground();
+            
             if (gameState === 'playing') {
                 gameSpeed = Math.min(3 + score * 0.01, 10);
                 
@@ -362,22 +383,7 @@
                     flake.draw();
                 });
                 
-                // Skok
-                if (player.jumping) {
-                    player.y += player.velY;
-                    player.velY += 0.6;
-                    player.angle = player.velY * 0.015;
-                    
-                    if (player.y >= canvas.height - 150) {
-                        player.y = canvas.height - 150;
-                        player.jumping = false;
-                        player.velY = 0;
-                        player.angle = 0;
-                        addParticles(player.x + 15, player.y + 40, 'white');
-                    }
-                }
-                
-                // Generowanie przeszkód
+                // Generowanie przeszkód (z dołu ekranu)
                 if (Math.random() < 0.02) {
                     obstacles.push(new Obstacle());
                 }
@@ -387,14 +393,14 @@
                     obstacle.update();
                     obstacle.draw();
                     
-                    if (checkCollision(player, obstacle) && !player.jumping) {
+                    if (checkCollision(player, obstacle)) {
                         gameState = 'gameOver';
-                        gameOverShown = false;
-                        addParticles(player.x + 15, player.y + 20, 'red');
+                        addParticles(player.x + 20, player.y + 25, 'red');
                         return false;
                     }
                     
-                    return obstacle.y < canvas.height + 50;
+                    // Usuń przeszkody które wyszły z góry ekranu
+                    return obstacle.y > -50;
                 });
                 
                 // Cząsteczki
@@ -420,9 +426,8 @@
                 document.getElementById('score').textContent = Math.floor(score);
             }
             
-            if (gameState === 'gameOver' && !gameOverShown) {
+            if (gameState === 'gameOver') {
                 showGameOver();
-                gameOverShown = true;
             }
             
             requestAnimationFrame(gameLoop);
@@ -435,13 +440,11 @@
             gameSpeed = 3;
             obstacles = [];
             particles = [];
-            gameOverShown = false;
+            bgOffset1 = 0;
+            bgOffset2 = 0;
             
-            player.x = canvas.width / 2 - 15;
-            player.y = canvas.height - 150;
-            player.velY = 0;
-            player.jumping = false;
-            player.angle = 0;
+            player.x = canvas.width / 2 - 20;
+            player.y = 80; // Gracz na górze
             
             touch.active = false;
             
@@ -460,10 +463,6 @@
             document.getElementById('gameOver').style.display = 'block';
         }
         
-        function restartGame() {
-            startGame();
-        }
-        
         // Obsługa zmiany rozmiaru
         window.addEventListener('resize', () => {
             canvas.width = window.innerWidth;
@@ -476,13 +475,13 @@
         }, { passive: false });
         
         // Inicjalizacja
-        setupFreeMovementControls();
+        setupMovementControls();
         initSnowflakes();
         gameLoop();
         
         document.getElementById('bestScore').textContent = bestScore;
         
-        console.log('Gra snowboardowa gotowa! 🏂');
+        console.log('Gra snowboardowa gotowa dla Jurka! 🏂');
     </script>
 </body>
-    </html>
+</html>
